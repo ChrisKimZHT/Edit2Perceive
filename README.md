@@ -165,8 +165,9 @@ If you have any questions, please feel free to contact yqshi@stu.pku.edu.cn -->
 ---
 ## 📰 News
 **Dec 19, 2025** Inference Code Release, with model weights
-
 **Dec 23, 2025** Training Code Release
+**Feb, 2026** This Paper was accepted by **CVPR2026**
+
 ## 🛠️ Installation
 
 ### 1. Environment Setup
