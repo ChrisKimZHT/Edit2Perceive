@@ -177,17 +177,22 @@ def clean_atom_mapping(smiles: str) -> str:
     return Chem.MolToSmiles(mol)
 
 
-def prepare_raw_data(file_path: str) -> list:
-    with open(file_path, "r") as f:
-        reader = csv.DictReader(f)
-        data_list = [row for row in reader]
+def prepare_raw_data(file_path: str | list) -> list:
+    if isinstance(file_path, str):
+        file_path = [file_path]
+
+    data_list = []
+    for path in file_path:
+        with open(path, "r") as f:
+            reader = csv.DictReader(f)
+            data_list.extend([row for row in reader])
 
     data = [item["reactants>reagents>production"] for item in data_list]
     data = list(set(data))  # Remove duplicates
 
     results = []
 
-    for idx, item in enumerate(tqdm(data, dynamic_ncols=True, desc=os.path.basename(file_path))):
+    for idx, item in enumerate(tqdm(data, dynamic_ncols=True, desc=str([os.path.basename(path) for path in file_path]))):
         reactants, _, product = item.split(">")
         reactants = clean_atom_mapping(reactants)
         product = clean_atom_mapping(product)
@@ -202,12 +207,11 @@ def prepare_raw_data(file_path: str) -> list:
 
 
 def main():
-    train_data = prepare_raw_data("./raw/uspto50k_train.csv")
+    train_data = prepare_raw_data(["./raw/uspto50k_train.csv", "./raw/uspto50k_val.csv"])
     test_data = prepare_raw_data("./raw/uspto50k_test.csv")
-    val_data = prepare_raw_data("./raw/uspto50k_val.csv")
 
     os.makedirs("./processed", exist_ok=True)
-    gen_data(train_data + val_data, "./processed/train")
+    gen_data(train_data, "./processed/train")
     gen_data(test_data, "./processed/test")
 
 
