@@ -843,7 +843,9 @@ class UnifiedDataset(torch.utils.data.Dataset):
             self.data = metadata
         elif metadata_path.endswith(".csv"):
             metadata = pandas.read_csv(metadata_path)
-            self.camera_intrinsics = [metadata.iloc[i].to_dict() for i in range(len(metadata))]
+            self.data = [metadata.iloc[i].to_dict() for i in range(len(metadata))]
+            # Keep this for backward compatibility with old camera-intrinsics usage paths.
+            self.camera_intrinsics = self.data
         elif metadata_path.endswith(".txt"):
             metadata = []
             # with some columns named as self.data_file_keys, seprated by space

@@ -659,3 +659,60 @@ def get_disperse_loss(eta, tau=1.0):
     loss = torch.log(expectation)
     
     return loss
+
+
+def get_cycle_consistency_retrosynthesis_loss(pred, gt, mask=None, eps=1e-6):
+    """
+    Extra loss for retrosynthesis image-to-image training.
+    Focuses on molecular strokes (foreground) and their edges, while keeping
+    a weak background regularization to avoid color drift.
+
+    Args:
+        pred: [B,3,H,W] or [B,H,W,3], value range usually in [-1, 1]
+        gt:   [B,3,H,W] or [B,H,W,3], value range usually in [-1, 1]
+        mask: optional [B,H,W] / [B,1,H,W]
+    Returns:
+        scalar tensor
+    """
+    if pred.dim() == 4 and pred.shape[1] != 3 and pred.shape[-1] == 3:
+        pred = pred.permute(0, 3, 1, 2)
+    if gt.dim() == 4 and gt.shape[1] != 3 and gt.shape[-1] == 3:
+        gt = gt.permute(0, 3, 1, 2)
+
+    device = pred.device
+    dtype = pred.dtype
+
+    pred = ((pred.clamp(-1, 1) + 1.0) / 2.0).to(dtype)
+    gt = ((gt.clamp(-1, 1) + 1.0) / 2.0).to(dtype)
+
+    # Convert to grayscale and build a soft foreground prior from GT.
+    gt_gray = 0.299 * gt[:, 0:1] + 0.587 * gt[:, 1:2] + 0.114 * gt[:, 2:3]
+    pred_gray = 0.299 * pred[:, 0:1] + 0.587 * pred[:, 1:2] + 0.114 * pred[:, 2:3]
+    fg_soft = (1.0 - gt_gray).clamp(0.0, 1.0)
+
+    if mask is not None:
+        if mask.ndim == 3:
+            mask = mask.unsqueeze(1)
+        elif mask.ndim == 4 and mask.shape[1] != 1:
+            mask = mask[:, :1]
+        fg_soft = fg_soft * mask.to(device=device, dtype=dtype)
+
+    # Foreground-focused robust photometric loss (Charbonnier).
+    diff = pred - gt
+    charbonnier = torch.sqrt(diff * diff + eps * eps)
+    fg_weight = 1.0 + 4.0 * fg_soft
+    recon_loss = (charbonnier * fg_weight).mean()
+
+    # Edge consistency on grayscale to preserve bonds/rings geometry.
+    sobel_x = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], device=device, dtype=dtype).view(1, 1, 3, 3)
+    sobel_y = torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], device=device, dtype=dtype).view(1, 1, 3, 3)
+    pred_gx = F.conv2d(pred_gray, sobel_x, padding=1)
+    pred_gy = F.conv2d(pred_gray, sobel_y, padding=1)
+    gt_gx = F.conv2d(gt_gray, sobel_x, padding=1)
+    gt_gy = F.conv2d(gt_gray, sobel_y, padding=1)
+
+    edge_weight = 1.0 + 6.0 * fg_soft
+    edge_loss = (torch.abs(pred_gx - gt_gx) + torch.abs(pred_gy - gt_gy))
+    edge_loss = (edge_loss * edge_weight).mean()
+
+    return recon_loss + 0.5 * edge_loss

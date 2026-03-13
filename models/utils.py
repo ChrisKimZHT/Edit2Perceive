@@ -380,7 +380,7 @@ class ModelLogger:
 
     def run_evaluation(self, model, full_size=False):
         if self.eval_steps is None:
-            return
+            return "Evaluation disabled: eval_steps is None"
         if not full_size:
             files = self.eval_file_list[:10]
             output_dir = self.eval_output_dir
@@ -388,7 +388,7 @@ class ModelLogger:
             files = self.eval_file_list[:654]
             output_dir = self.eval_output_dir + "_full"
         if len(files) == 0:
-            return
+            return "Evaluation skipped: empty eval_file_list"
 
         try:
             from models.unified_dataset import UnifiedDataset
@@ -504,7 +504,7 @@ class ModelLogger:
             results = self.run_evaluation(model)
             with open(os.path.join(self.eval_output_dir, "log.txt"), "a") as f:
                 f.write(f"Step {self.num_steps} evaluation results:\n")
-                f.write(results+"\n")
+                f.write((results if results is not None else "Evaluation skipped") + "\n")
         accelerator.wait_for_everyone()
         
         model.switch_pipe_to_training_mode(model.pipe,self.trainable_models,None,None,None,None)
@@ -538,7 +538,7 @@ class ModelLogger:
             results = self.run_evaluation(model,full_size=True)
             with open(os.path.join(self.eval_output_dir+"_full", "log_full.txt"), "a") as f:
                 f.write(f"Step {self.num_steps} evaluation results:\n")
-                f.write(results+"\n")
+                f.write((results if results is not None else "Evaluation skipped") + "\n")
         accelerator.wait_for_everyone()
 
         model.switch_pipe_to_training_mode(model.pipe,self.trainable_models,None,None,None,None)
@@ -615,7 +615,7 @@ def launch_training_task(
                 pbar.set_description(f"Loss {loss.item():.4f}")
                 accelerator.backward(loss)
                 optimizer.step()
-                torch.cuda.empty_cache()
+                # torch.cuda.empty_cache()
                 model_logger.on_step_end(accelerator, model, save_steps)
                 # Evaluation hook
                 model_logger.on_eval_step(accelerator, model)
@@ -694,6 +694,6 @@ def flux_parser():
     parser.add_argument("--resume", default=False, action="store_true", help="Whether to resume training from a checkpoint.")
     parser.add_argument("--task", type=str, default="depth", required=False, help="Task type, e.g., depth, normal.")
     # loss
-    parser.add_argument("--extra_loss", type=str, default=None, help="Loss type for depth estimation, e.g., l1, l2, berhu.")
+    parser.add_argument("--extra_loss", type=str, default=None, help="Optional extra loss name, e.g., cycle_consistency_depth_estimation / cycle_consistency_normal_estimation / cycle_consistency_matting_estimation / cycle_consistency_retrosynthesis.")
     parser.add_argument("--extra_loss_start_epoch", type=int, default=0, help="The start epoch for applying extra loss. before this epoch, only the main loss is used.")
     return parser

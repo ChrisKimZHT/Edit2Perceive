@@ -302,6 +302,35 @@ python preprocess/depth/preprocess_hypersim.py --dataset_dir /path/to/hypersim -
 </details>
 
 <details>
+<summary><strong>Datasets for Retrosynthesis</strong> (USPTO-50k image pairs)</summary>
+
+1. Prepare raw USPTO CSV files under `uspto/raw/`:
+```text
+uspto/raw/uspto50k_train.csv
+uspto/raw/uspto50k_val.csv
+uspto/raw/uspto50k_test.csv
+```
+
+2. Generate image pairs (product -> reactants):
+```bash
+cd uspto
+python generate_image_pair.py --workers 16 --size 768
+cd ..
+```
+
+3. Generated training files:
+```text
+uspto/processed/train/data.csv
+uspto/processed/train/images/*.png
+uspto/processed/test/data.csv
+uspto/processed/test/images/*.png
+```
+
+`data.csv` now contains `kontext_images` (product image) and `image` (reactant image), so it can be directly used by `scripts/train.py`.
+
+</details>
+
+<details>
 <summary><strong>Datasets for Surface Normal</strong> (Hypersim, InteriorVerse & Sintel)</summary>
 
 1. **Hypersim Dataset**
@@ -361,6 +390,9 @@ Update the `--dataset_base_path` in the scripts located in `scripts/*.sh`. **Not
 
 # Example for Matting
 --dataset_base_path "/path/to/composition-1k,/path/to/Distinctions-646,/path/to/AM-2k,/path/to/COCO-Matte"
+
+# Example for Retrosynthesis (USPTO)
+--dataset_base_path "./uspto/processed/train,./uspto/processed/test"
 ```
 
 ### 3. Run Training
@@ -379,6 +411,9 @@ bash scripts/Kontext_normal.sh
 # Interactive Matting
 bash scripts/Kontext_matting_lora.sh
 bash scripts/Kontext_matting.
+
+# Retrosynthesis
+bash scripts/Kontext_retrosynthesis_lora.sh
 ```
 
 ---

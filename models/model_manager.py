@@ -32,7 +32,9 @@ def load_model_from_single_file(state_dict, model_names, model_classes, model_re
         if hasattr(model, "eval"):
             model = model.eval()
         model.load_state_dict(model_state_dict, assign=True)
-        model = model.to(dtype=torch_dtype, device=device)
+        # For distributed training, keep models on CPU to let Accelerate/DeepSpeed handle device placement
+        load_device = "cpu" if device != "cpu" else device
+        model = model.to(dtype=torch_dtype, device=load_device)
         loaded_model_names.append(model_name)
         loaded_models.append(model)
     return loaded_model_names, loaded_models
@@ -47,8 +49,10 @@ def load_model_from_huggingface_folder(file_path, model_names, model_classes, to
             model = model_class.from_pretrained(file_path).eval().to(dtype=torch_dtype)
         if torch_dtype == torch.float16 and hasattr(model, "half"):
             model = model.half()
+        # For distributed training, keep models on CPU to let Accelerate/DeepSpeed handle device placement
+        load_device = "cpu" if device != "cpu" else device
         try:
-            model = model.to(device=device)
+            model = model.to(device=load_device)
         except:
             pass
         loaded_model_names.append(model_name)

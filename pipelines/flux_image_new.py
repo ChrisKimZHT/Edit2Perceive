@@ -20,7 +20,7 @@ from lora.flux_lora import FluxLoRALoader, FluxLoraPatcher, FluxLoRAFuser
 
 from models.flux_dit import RMSNorm
 from vram_management import gradient_checkpoint_forward, enable_vram_management, AutoWrappedModule, AutoWrappedLinear
-from utils.cycle_loss import get_cycle_consistency_normal_loss,get_cycle_consistency_depth_loss,get_cycle_consistency_matting_loss,get_disperse_loss,ScaleAndShiftInvariantLoss
+from utils.cycle_loss import get_cycle_consistency_normal_loss,get_cycle_consistency_depth_loss,get_cycle_consistency_matting_loss,get_cycle_consistency_retrosynthesis_loss,get_disperse_loss,ScaleAndShiftInvariantLoss
 import matplotlib.pyplot as plt
 
 
@@ -193,8 +193,11 @@ class FluxImagePipeline(BasePipeline):
                 cycle_consistency_loss = get_cycle_consistency_depth_loss(decoded,inputs["input_image"], inputs.get("mask", None),depth_normalization=inputs.get("depth_normalization","log"))
             elif inputs.get("extra_loss",None) == "cycle_consistency_matting_estimation":
                 cycle_consistency_loss = get_cycle_consistency_matting_loss(decoded,inputs["input_image"], inputs.get("trimap", None))
-            # return flow_loss, cycle_consistency_loss
-            return cycle_consistency_loss.to(torch.bfloat16)
+            elif inputs.get("extra_loss", None) in {"cycle_consistency_retrosynthesis", "cycle_consistency_retrosynthesis_estimation"}:
+                cycle_consistency_loss = get_cycle_consistency_retrosynthesis_loss(decoded, inputs["input_image"], inputs.get("mask", None))
+            else:
+                raise ValueError(f"Unknown extra_loss: {inputs.get('extra_loss', None)}")
+            return flow_loss.to(torch.bfloat16), cycle_consistency_loss.to(torch.bfloat16)
         return flow_loss
 
     def _enable_vram_management_with_default_config(self, model, vram_limit):
@@ -452,33 +455,17 @@ class FluxImagePipeline(BasePipeline):
             )
         
         # Initialize pipeline
-        pipe = FluxImagePipeline(device=device, torch_dtype=torch_dtype)
+        pipe = FluxImagePipeline(device="cpu", torch_dtype=torch_dtype)
         pipe.text_encoder_1 = model_manager.fetch_model("sd3_text_encoder_1")
         # pipe.text_encoder_1 = model_manager.fetch_model("clip_text_encoder")
         pipe.text_encoder_2 = model_manager.fetch_model("flux_text_encoder_2")
-        # Safety: ensure text encoders are on the main pipeline device (some loader paths may leave them on cpu)
-        if pipe.text_encoder_1 is not None:
-            try:
-                pipe.text_encoder_1.to(device=device)
-            except Exception as _e:
-                pass
-        if pipe.text_encoder_2 is not None:
-            try:
-                pipe.text_encoder_2.to(device=device)
-            except Exception as _e:
-                pass
+        # Keep models on CPU for Accelerate/DeepSpeed to distribute them properly in multi-GPU training
+        # Note: Accelerate.prepare() will move them to correct devices based on distributed_type config
         
         pipe.dit =  model_manager.fetch_model("flux_dit")
         # pipe.dit = model_manager.fetch_model("flux_transformer2dmodel")
         pipe.vae_decoder = model_manager.fetch_model("flux_vae_decoder")
         pipe.vae_encoder = model_manager.fetch_model("flux_vae_encoder")
-        # Ensure core diffusion components are on target device (avoid CPU weights during first forward)
-        for _m in [pipe.dit, pipe.vae_decoder, pipe.vae_encoder]:
-            if _m is not None:
-                try:
-                    _m.to(device=device)
-                except Exception:
-                    pass
         pipe.prompter.fetch_models(pipe.text_encoder_1, pipe.text_encoder_2)
 
         pipe.lora_patcher = model_manager.fetch_model("flux_lora_patcher")

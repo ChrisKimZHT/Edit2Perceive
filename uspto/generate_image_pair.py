@@ -135,6 +135,8 @@ def gen_one(item: dict, image_dir: str) -> dict | None:
 
     return {
         "idx": item["idx"],
+        "kontext_images": os.path.join("images", product_image_filename),
+        "image": os.path.join("images", reactant_image_filename),
         "reactant_image": reactant_image_filename,
         "product_image": product_image_filename,
         "reactant": reactant_smiles_raw,
@@ -161,7 +163,7 @@ def gen_data(data_list: list, out_path: str):
 
     output_file = os.path.join(out_path, f"data.csv")
     with open(output_file, "w", newline="") as f:
-        fieldnames = ["idx", "reactant_image", "product_image", "reactant", "product"]
+        fieldnames = ["idx", "kontext_images", "image", "reactant_image", "product_image", "reactant", "product"]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for item in results:

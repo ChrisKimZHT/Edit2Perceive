@@ -137,8 +137,11 @@ if __name__ == "__main__":
     elif "matting" in metadata_paths[0]:
         args.task = "matting"
         print("!!! Doing matting task !!!")
+    elif "retrosynthesis" in metadata_paths[0] or "uspto" in metadata_paths[0] or "retro" in metadata_paths[0]:
+        args.task = "retrosynthesis"
+        print("!!! Doing retrosynthesis task !!!")
     else:
-        raise ValueError("Cannot infer task from metadata path; please include 'depth' or 'normal' in the path.")
+        raise ValueError("Cannot infer task from metadata path; please include one of: depth, normal, matting, retrosynthesis/uspto.")
     if args.using_pdf:
         print("!!! Using PDF operator for image loading !!!")
         pdf = np.load("depth_mapping_lookup_table.npz")
@@ -202,6 +205,10 @@ if __name__ == "__main__":
                 prob=[0.02,0.65,0.33]
             elif len(datasets_ls)==4:
                 prob=[0.22,0.22,0.3,0.26]
+            else:
+                prob=[1.0/len(datasets_ls)] * len(datasets_ls)
+        else:
+            prob=[1.0/len(datasets_ls)] * len(datasets_ls)
         mixed_sampler = MixedBatchSampler(datasets_ls, shuffle=True, batch_size=args.batch_size, drop_last=True, prob=prob)
         print(f"using {len(datasets_ls)} datasets, total length: {len(dataset)} with PROB:{prob}")
     else:
@@ -217,29 +224,34 @@ if __name__ == "__main__":
                 eval_file_list = [line.strip().split()[0] for line in f]
                 base_dir = "/mnt/nfs/workspace/syq/dataset/matting/P3M-10k"
             else:
-                raise ValueError(f"Unknown task {args.task}")
+                print(f"Task {args.task} has no built-in evaluation script. Skip evaluation during training.")
+                eval_file_list = []
+                base_dir = ""
             print(f"Loaded {len(eval_file_list)} evaluation files.")
         
-        eval_file_list = [os.path.join(base_dir, x) if not os.path.isabs(x) else x for x in eval_file_list]
+        eval_file_list = [os.path.join(base_dir, x) if (base_dir and not os.path.isabs(x)) else x for x in eval_file_list]
         args.eval_file_list = eval_file_list
         print(f"top 5 evaluation files: {eval_file_list[:5]}")
-        model = FluxTrainingModule(
-            model_paths=args.model_paths,
-            model_id_with_origin_paths=args.model_id_with_origin_paths,
-            trainable_models=args.trainable_models,
-            lora_base_model=args.lora_base_model,
-            lora_target_modules=args.lora_target_modules,
-            lora_rank=args.lora_rank,
-            lora_checkpoint=find_latest_checkpoint(args.output_path) if (args.resume and args.lora_base_model is not None) else None,
-            use_gradient_checkpointing=args.use_gradient_checkpointing,
-            use_gradient_checkpointing_offload=args.use_gradient_checkpointing_offload,
-            extra_inputs=args.extra_inputs,
-            multi_res_noise=args.multi_res_noise,
-            deterministic_flow=args.deterministic_flow,
-            extra_loss=args.extra_loss,
-            depth_normalization=args.depth_normalization,
-            matting_prompt=args.matting_prompt if args.task == "matting" else None,
-        )
+    else:
+        args.eval_file_list = []
+
+    model = FluxTrainingModule(
+        model_paths=args.model_paths,
+        model_id_with_origin_paths=args.model_id_with_origin_paths,
+        trainable_models=args.trainable_models,
+        lora_base_model=args.lora_base_model,
+        lora_target_modules=args.lora_target_modules,
+        lora_rank=args.lora_rank,
+        lora_checkpoint=find_latest_checkpoint(args.output_path) if (args.resume and args.lora_base_model is not None) else None,
+        use_gradient_checkpointing=args.use_gradient_checkpointing,
+        use_gradient_checkpointing_offload=args.use_gradient_checkpointing_offload,
+        extra_inputs=args.extra_inputs,
+        multi_res_noise=args.multi_res_noise,
+        deterministic_flow=args.deterministic_flow,
+        extra_loss=args.extra_loss,
+        depth_normalization=args.depth_normalization,
+        matting_prompt=args.matting_prompt if args.task == "matting" else None,
+    )
     if args.resume and os.path.isdir(args.output_path):
         latest_ckpt = find_latest_checkpoint(args.output_path)
         if latest_ckpt is not None:
